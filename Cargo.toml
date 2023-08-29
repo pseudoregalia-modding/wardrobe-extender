@@ -1,0 +1,14 @@
+[package]
+name = "wardrobe-extender"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+unreal_asset = { git = "https://github.com/astrotechies/unrealmodding", rev = "186842c" }
+repak = { git = "https://github.com/bananaturtlesandwich/repak", rev = "364d0e1", default-features = false, features = ["compression", "oodle"] }
+gvas = { git = "https://github.com/bananaturtlesandwich/gvas", rev = "b528b5c" }
+
+[profile.release]
+strip = true
+lto = "thin"
+panic = "abort"
