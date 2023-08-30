@@ -1,62 +1,99 @@
 use unreal_asset::{properties::*, types::PackageIndex, Export};
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("accessing filesystem: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("parsing asset: {0}")]
+    UnrealAsset(#[from] unreal_asset::Error),
+    #[error("parsing save: {0}")]
+    Gvas(#[from] gvas::error::Error),
+    #[error("reading/writing pak: {0}")]
+    Repak(#[from] repak::Error),
+    #[error("couldn't cast DT_OutfitData - verify your game files")]
+    Datatable,
+    #[error("couldn't get costume pak name")]
+    Filestem,
+}
+
+type Asset = unreal_asset::Asset<std::io::Cursor<Vec<u8>>>;
+
 fn main() {
-    let pak = || std::fs::File::open("pseudoregalia-Windows.pak").unwrap();
-    let game = repak::PakReader::new(&mut pak(), repak::Version::V11).unwrap();
-    std::fs::create_dir_all("outfits").unwrap();
-    std::fs::create_dir_all("~mods").unwrap();
-    let mut pak = pak();
-    let mut get = |path: &str| {
-        unreal_asset::Asset::new(
-            std::io::Cursor::new(game.get(&(path.to_string() + ".uasset"), &mut pak).unwrap()),
+    loop {
+        match run() {
+            Ok(()) => break,
+            Err(e) => {
+                eprintln!("{e}");
+                println!("press enter to try again :/");
+                let _ = std::io::stdin().read_line(&mut String::new());
+            }
+        }
+    }
+}
+
+fn run() -> Result<(), Error> {
+    let pak = || std::fs::File::open("pseudoregalia-Windows.pak");
+    let game = repak::PakReader::new(&mut pak()?, repak::Version::V11)?;
+    std::fs::create_dir_all("outfits")?;
+    std::fs::create_dir_all("~mods")?;
+    let mut pak = pak()?;
+    let mut get = |path: &str| -> Result<Asset, Error> {
+        Ok(unreal_asset::Asset::new(
+            std::io::Cursor::new(game.get(&(path.to_string() + ".uasset"), &mut pak)?),
             Some(std::io::Cursor::new(
-                game.get(&(path.to_string() + ".uexp"), &mut pak).unwrap(),
+                game.get(&(path.to_string() + ".uexp"), &mut pak)?,
             )),
             unreal_asset::engine_version::EngineVersion::VER_UE5_1,
             None,
-        )
-        .unwrap()
+        )?)
     };
-    let mut table_asset = get("pseudoregalia/Content/Data/DataTables/DT_OutfitData");
+    let mut table_asset = get("pseudoregalia/Content/Data/DataTables/DT_OutfitData")?;
     let mut table_names = table_asset.get_name_map();
     let table = &mut unreal_asset::cast!(
         Export,
         DataTableExport,
         &mut table_asset.asset_data.exports[0]
     )
-    .unwrap()
+    .ok_or(Error::Datatable)?
     .table
     .data;
     let mut outfits = vec![];
     let mut modfiles = repak::PakWriter::new(
-        std::fs::File::create("~mods/outfits_p.pak").unwrap(),
+        std::fs::File::create("~mods/outfits_p.pak")?,
         repak::Version::V11,
         "../../../".to_string(),
         None,
     );
-    for (costume_name, pak, mut file) in std::fs::read_dir("outfits")
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter_map(|entry| {
-            (entry.extension() == Some(std::ffi::OsStr::new("pak"))).then(|| {
-                (
-                    entry.file_stem().unwrap().to_string_lossy().to_string(),
-                    repak::PakReader::new_any(&mut std::fs::File::open(&entry).unwrap()).unwrap(),
-                    std::fs::File::open(&entry).unwrap(),
-                )
-            })
+    for outfit in std::fs::read_dir("outfits")?
+        .map(|entry| Ok::<_, Error>(entry?.path()))
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .is_ok_and(|entry| entry.extension() == Some(std::ffi::OsStr::new("pak")))
+        })
+        .map(|entry| {
+            let entry = entry?;
+            Ok::<_, Error>((
+                entry
+                    .file_stem()
+                    .ok_or(Error::Filestem)?
+                    .to_str()
+                    .unwrap_or_default()
+                    .to_string(),
+                repak::PakReader::new_any(&mut std::fs::File::open(&entry)?)?,
+                std::fs::File::open(&entry)?,
+            ))
         })
     {
+        let (costume_name, pak, mut file) = outfit?;
         let mut table_names = table_names.get_mut();
         let path = "pseudoregalia/Content/Meshes/Characters/".to_string() + &costume_name;
         let mount = pak.mount_point().trim_start_matches("../../../");
         for asset in pak.files() {
-            modfiles
-                .write_file(
-                    &(mount.to_string() + &asset),
-                    &mut pak.get(&asset, &mut file).unwrap(),
-                )
-                .unwrap();
+            modfiles.write_file(
+                &(mount.to_string() + &asset),
+                &mut pak.get(&asset, &mut file)?,
+            )?;
         }
         outfits.push(gvas::properties::Property::NameProperty(
             gvas::properties::name_property::NameProperty {
@@ -111,53 +148,42 @@ fn main() {
         println!("{} added", costume_name.replace("_", " "));
     }
     let mut table = (std::io::Cursor::new(vec![]), std::io::Cursor::new(vec![]));
-    table_asset
-        .write_data(&mut table.0, Some(&mut table.1))
-        .unwrap();
-    modfiles
-        .write_file(
-            "pseudoregalia/Content/Data/DataTables/DT_OutfitData.uasset",
-            table.0.into_inner(),
-        )
-        .unwrap();
-    modfiles
-        .write_file(
-            "pseudoregalia/Content/Data/DataTables/DT_OutfitData.uexp",
-            table.1.into_inner(),
-        )
-        .unwrap();
-    modfiles.write_index().unwrap();
+    table_asset.write_data(&mut table.0, Some(&mut table.1))?;
+    modfiles.write_file(
+        "pseudoregalia/Content/Data/DataTables/DT_OutfitData.uasset",
+        table.0.into_inner(),
+    )?;
+    modfiles.write_file(
+        "pseudoregalia/Content/Data/DataTables/DT_OutfitData.uexp",
+        table.1.into_inner(),
+    )?;
+    modfiles.write_index()?;
 
     let Some(saves) = std::env::var_os("USERPROFILE")
         .filter(|home| !home.is_empty())
         .map(std::path::PathBuf::from)
-        .map(|path| path.join("AppData/Local"))
-        .map(|path| path.join("pseudoregalia/Saved/SaveGames"))
-        .map(|path| {
-            path.read_dir()
-                .unwrap()
-                .map(|entry| entry.unwrap().path())
-                .filter_map(|entry| {
-                    match entry.extension() == Some(std::ffi::OsStr::new("sav"))
-                        && !entry.ends_with("settingsSave.sav")
-                    {
-                        true => {
-                            match gvas::GvasFile::read(&mut std::fs::File::open(&entry).unwrap()) {
-                                Ok(save) => Some((save, entry)),
-                                Err(e) => {
-                                    eprintln!("writing to {entry:?}: {e}");
-                                    None
-                                }
-                            }
-                        }
-                        false => None,
-                    }
-                })
-        })
+        .map(|path| path.join("AppData/Local/pseudoregalia/Saved/SaveGames"))
     else {
-        return;
+        return Ok(());
     };
-    for (mut save, path) in saves {
+    for bundle in saves
+        .read_dir()?
+        .map(|entry| Ok::<_, Error>(entry?.path()))
+        .filter(|entry| {
+            entry.as_ref().is_ok_and(|entry| {
+                entry.extension() == Some(std::ffi::OsStr::new("sav"))
+                    && !entry.ends_with("settingsSave.sav")
+            })
+        })
+        .map(|entry| {
+            let entry = entry?;
+            Ok::<_, Error>((
+                gvas::GvasFile::read(&mut std::fs::File::open(&entry)?)?,
+                entry,
+            ))
+        })
+    {
+        let (mut save, path) = bundle?;
         let Some(unlocked) = save
             .properties
             .get_mut("unlockedOutfits")
@@ -195,11 +221,11 @@ fn main() {
         {
             current.value = "base".to_string()
         }
-        save.write(&mut std::fs::File::create(&path).unwrap())
-            .unwrap();
+        save.write(&mut std::fs::File::create(&path)?)?;
         println!("{:?} written", path.file_name().unwrap_or_default());
     }
     println!("finished! you can now launch the game");
     println!("press enter to exit :)");
-    std::io::stdin().read_line(&mut String::new()).unwrap();
+    std::io::stdin().read_line(&mut String::new())?;
+    Ok(())
 }
