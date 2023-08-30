@@ -1,10 +1,8 @@
 use unreal_asset::{properties::*, types::PackageIndex, Export};
 
 fn main() {
-    // luckily pseudoregalia is the first version it checks but again need to have a chat with truman about api
     let pak = || std::fs::File::open("pseudoregalia-Windows.pak").unwrap();
-    // new_any should really take a mutable reference to the reader since it doesn't store it
-    let game = repak::PakReader::new_any(&mut pak()).unwrap();
+    let game = repak::PakReader::new(&mut pak(), repak::Version::V11).unwrap();
     std::fs::create_dir_all("outfits").unwrap();
     std::fs::create_dir_all("~mods").unwrap();
     let mut pak = pak();
@@ -31,7 +29,7 @@ fn main() {
     .data;
     let mut outfits = vec![];
     let mut modfiles = repak::PakWriter::new(
-        std::fs::File::create("~mods/costumes_p.pak").unwrap(),
+        std::fs::File::create("~mods/outfits_p.pak").unwrap(),
         repak::Version::V11,
         "../../../".to_string(),
         None,
@@ -163,6 +161,10 @@ fn main() {
             .get_mut("unlockedOutfits")
             .and_then(gvas::properties::Property::get_array_mut)
         else {
+            println!(
+                "{:?} skipped since it doesn't have unlockedOutfits",
+                path.file_name().unwrap_or_default()
+            );
             continue;
         };
         let old: Vec<_> = unlocked
@@ -174,7 +176,7 @@ fn main() {
                 outfit
                     .get_name()
                     .is_some_and(|name| {
-                        ["base", "greaves", "glove", "pants", "pro"]
+                        !["base", "greaves", "glove", "pants", "pro"]
                             .contains(&name.value.to_ascii_lowercase().as_str())
                     })
                     .then_some(i)
@@ -184,6 +186,13 @@ fn main() {
             unlocked.properties.remove(i);
         }
         unlocked.properties.append(&mut outfits);
+        if let Some(current) = save
+            .properties
+            .get_mut("currentOutfit")
+            .and_then(gvas::properties::Property::get_name_mut)
+        {
+            current.value = "base".to_string()
+        }
         save.write(&mut std::fs::File::create(&path).unwrap())
             .unwrap();
         println!("{:?} written", path.file_name().unwrap_or_default());
