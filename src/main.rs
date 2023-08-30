@@ -137,8 +137,10 @@ fn main() {
             path.read_dir()
                 .unwrap()
                 .map(|entry| entry.unwrap().path())
-                .filter_map(
-                    |entry| match entry.extension() == Some(std::ffi::OsStr::new("sav")) {
+                .filter_map(|entry| {
+                    match entry.extension() == Some(std::ffi::OsStr::new("sav"))
+                        && !entry.ends_with("settingsSave.sav")
+                    {
                         true => {
                             match gvas::GvasFile::read(&mut std::fs::File::open(&entry).unwrap()) {
                                 Ok(save) => Some((save, entry)),
@@ -149,8 +151,8 @@ fn main() {
                             }
                         }
                         false => None,
-                    },
-                )
+                    }
+                })
         })
     else {
         return;
@@ -162,7 +164,7 @@ fn main() {
             .and_then(gvas::properties::Property::get_array_mut)
         else {
             println!(
-                "{:?} skipped since it doesn't have unlockedOutfits",
+                "{:?} skipped - resave this file in-game to fix",
                 path.file_name().unwrap_or_default()
             );
             continue;
@@ -185,7 +187,7 @@ fn main() {
         for i in old {
             unlocked.properties.remove(i);
         }
-        unlocked.properties.append(&mut outfits);
+        unlocked.properties.extend_from_slice(&outfits);
         if let Some(current) = save
             .properties
             .get_mut("currentOutfit")
