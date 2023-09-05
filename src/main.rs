@@ -214,6 +214,7 @@ fn run() -> Result<(), Error> {
             unlocked.properties.remove(i);
         }
         unlocked.properties.extend_from_slice(&outfits);
+        unlocked.properties.dedup();
         if let Some(current) = save
             .properties
             .get_mut("currentOutfit")
