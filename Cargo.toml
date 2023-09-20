@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 unreal_asset = { git = "https://github.com/astrotechies/unrealmodding", rev = "186842c" }
-repak = { git = "https://github.com/bananaturtlesandwich/repak", rev = "364d0e1", default-features = false, features = ["compression", "oodle"] }
+repak = { git = "https://github.com/bananaturtlesandwich/repak", rev = "8798e57", default-features = false, features = ["compression", "oodle"] }
 gvas = { git = "https://github.com/localcc/gvas", rev = "b42f6f4" }
 thiserror = "1.0"
 

@@ -18,6 +18,26 @@ enum Error {
 
 type Asset = unreal_asset::Asset<std::io::Cursor<Vec<u8>>>;
 
+#[link(name = "oo2core_win64", kind = "static")]
+extern "C" {
+    fn OodleLZ_Decompress(
+        compBuf: *mut u8,
+        compBufSize: usize,
+        rawBuf: *mut u8,
+        rawLen: usize,
+        fuzzSafe: u32,
+        checkCRC: u32,
+        verbosity: u32,
+        decBufBase: u64,
+        decBufSize: usize,
+        fpCallback: u64,
+        callbackUserData: u64,
+        decoderMemory: *mut u8,
+        decoderMemorySize: usize,
+        threadPhase: u32,
+    ) -> i32;
+}
+
 fn main() {
     loop {
         match run() {
@@ -33,7 +53,9 @@ fn main() {
 
 fn run() -> Result<(), Error> {
     let pak = || std::fs::File::open("pseudoregalia-Windows.pak");
-    let game = repak::PakReader::new(&mut pak()?, repak::Version::V11)?;
+    let game = repak::PakBuilder::new()
+        .oodle(|| OodleLZ_Decompress)
+        .reader_with_version(&mut pak()?, repak::Version::V11)?;
     std::fs::create_dir_all("outfits")?;
     std::fs::create_dir_all("~mods")?;
     let mut pak = pak()?;
@@ -58,7 +80,7 @@ fn run() -> Result<(), Error> {
     .table
     .data;
     let mut outfits = vec![];
-    let mut modfiles = repak::PakWriter::new(
+    let mut modfiles = repak::PakBuilder::new().writer(
         std::fs::File::create("~mods/outfits_p.pak")?,
         repak::Version::V11,
         "../../../".to_string(),
@@ -80,7 +102,7 @@ fn run() -> Result<(), Error> {
                     .to_str()
                     .unwrap_or_default()
                     .to_string(),
-                repak::PakReader::new_any(&mut std::fs::File::open(&entry)?)?,
+                repak::PakBuilder::new().reader(&mut std::fs::File::open(&entry)?)?,
                 std::fs::File::open(&entry)?,
             ))
         })
