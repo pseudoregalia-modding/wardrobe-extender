@@ -194,7 +194,9 @@ fn run() -> Result<(), Error> {
         .filter(|entry| {
             entry.as_ref().is_ok_and(|entry| {
                 entry.extension() == Some(std::ffi::OsStr::new("sav"))
-                    && !entry.ends_with("settingsSave.sav")
+                    && entry
+                        .file_name()
+                        .is_some_and(|file| file.to_str().unwrap_or_default().starts_with("File "))
             })
         })
         .map(|entry| {
@@ -217,24 +219,6 @@ fn run() -> Result<(), Error> {
             );
             continue;
         };
-        let old: Vec<_> = unlocked
-            .properties
-            .iter()
-            .enumerate()
-            .rev()
-            .filter_map(|(i, outfit)| {
-                outfit
-                    .get_name()
-                    .is_some_and(|name| {
-                        !["base", "greaves", "glove", "pants", "pro"]
-                            .contains(&name.value.to_ascii_lowercase().as_str())
-                    })
-                    .then_some(i)
-            })
-            .collect();
-        for i in old {
-            unlocked.properties.remove(i);
-        }
         unlocked.properties.extend_from_slice(&outfits);
         unlocked.properties.dedup();
         if let Some(current) = save
