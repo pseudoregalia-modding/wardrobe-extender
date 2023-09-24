@@ -219,8 +219,25 @@ fn run() -> Result<(), Error> {
             );
             continue;
         };
+        let old: Vec<_> = unlocked
+            .properties
+            .iter()
+            .enumerate()
+            .rev()
+            .filter_map(|(i, outfit)| {
+                outfit
+                    .get_name()
+                    .is_some_and(|name| {
+                        !["base", "greaves", "glove", "pants", "pro"]
+                            .contains(&name.value.to_ascii_lowercase().as_str())
+                    })
+                    .then_some(i)
+            })
+            .collect();
+        for i in old {
+            unlocked.properties.remove(i);
+        }
         unlocked.properties.extend_from_slice(&outfits);
-        unlocked.properties.dedup();
         if let Some(current) = save
             .properties
             .get_mut("currentOutfit")
