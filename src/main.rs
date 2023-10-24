@@ -14,6 +14,10 @@ enum Error {
     Datatable,
     #[error("couldn't get costume pak name")]
     Filestem,
+    #[error("couldn't access pseudoregalia-Windows.pak. wardrobe-extender should be placed in the same location.")]
+    PakLocation,
+    #[error("couldn't open pseudoregalia-Windows.pak with repak.")]
+    PakOpen,
 }
 
 type Asset = unreal_asset::Asset<std::io::Cursor<Vec<u8>>>;
@@ -55,7 +59,8 @@ fn run() -> Result<(), Error> {
     let pak = || std::fs::File::open("pseudoregalia-Windows.pak");
     let game = repak::PakBuilder::new()
         .oodle(|| OodleLZ_Decompress)
-        .reader_with_version(&mut pak()?, repak::Version::V11)?;
+        .reader_with_version(&mut pak().or(Err(Error::PakLocation))?, repak::Version::V11)
+		.or(Err(Error::PakOpen))?;
     std::fs::create_dir_all("outfits")?;
     std::fs::create_dir_all("~mods")?;
     let mut pak = pak()?;
