@@ -60,7 +60,7 @@ fn run() -> Result<(), Error> {
     let game = repak::PakBuilder::new()
         .oodle(|| OodleLZ_Decompress)
         .reader_with_version(&mut pak().or(Err(Error::PakLocation))?, repak::Version::V11)
-		.or(Err(Error::PakOpen))?;
+        .or(Err(Error::PakOpen))?;
     std::fs::create_dir_all("outfits")?;
     std::fs::create_dir_all("~mods")?;
     let mut pak = pak()?;
