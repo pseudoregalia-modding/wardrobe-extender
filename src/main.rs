@@ -59,8 +59,11 @@ fn run() -> Result<(), Error> {
     let pak = || std::fs::File::open("pseudoregalia-Windows.pak");
     let game = repak::PakBuilder::new()
         .oodle(|| OodleLZ_Decompress)
-        .reader_with_version(&mut pak().or(Err(Error::PakLocation))?, repak::Version::V11)
-        .or(Err(Error::PakOpen))?;
+        .reader_with_version(
+            &mut pak().map_err(|_| Error::PakLocation)?,
+            repak::Version::V11,
+        )
+        .map_err(|_| Error::PakOpen)?;
     std::fs::create_dir_all("outfits")?;
     std::fs::create_dir_all("~mods")?;
     let mut pak = pak()?;
