@@ -14,9 +14,9 @@ enum Error {
     Datatable,
     #[error("couldn't get costume pak name")]
     Filestem,
-    #[error("couldn't access pseudoregalia-Windows.pak. wardrobe-extender should be placed in the same location.")]
+    #[error("couldn't access pseudoregalia-Windows.pak - wardrobe-extender should be placed in the same location.")]
     PakLocation,
-    #[error("couldn't open pseudoregalia-Windows.pak with repak.")]
+    #[error("couldn't open pseudoregalia-Windows.pak with repak")]
     PakOpen,
 }
 
@@ -42,6 +42,10 @@ extern "C" {
     ) -> i32;
 }
 
+extern "system" {
+    fn SetProcessDPIAware();
+}
+
 fn main() {
     loop {
         match run() {
@@ -56,6 +60,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
+    unsafe { SetProcessDPIAware() };
     let pak = || std::fs::File::open("pseudoregalia-Windows.pak");
     let game = repak::PakBuilder::new()
         .oodle(|| OodleLZ_Decompress)
@@ -190,9 +195,10 @@ fn run() -> Result<(), Error> {
     modfiles.write_index()?;
 
     let Some(saves) = std::env::var_os("USERPROFILE")
-        .filter(|home| !home.is_empty())
         .map(std::path::PathBuf::from)
         .map(|path| path.join("AppData/Local/pseudoregalia/Saved/SaveGames"))
+        .filter(|path| path.exists())
+        .or_else(|| rfd::FileDialog::new().set_title("save folder couldn't be found - please select the location if you have created saves").pick_folder())
     else {
         return Ok(());
     };

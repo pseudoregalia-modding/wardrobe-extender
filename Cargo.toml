@@ -8,6 +8,7 @@ unreal_asset = { git = "https://github.com/astrotechies/unrealmodding", rev = "1
 repak = { git = "https://github.com/bananaturtlesandwich/repak", rev = "8798e57", default-features = false, features = ["compression", "oodle"] }
 gvas = { git = "https://github.com/localcc/gvas", rev = "b42f6f4" }
 thiserror = "1.0"
+rfd = "0.12"
 
 [profile.release]
 strip = true
